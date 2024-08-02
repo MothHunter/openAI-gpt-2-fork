@@ -22,17 +22,38 @@ def softmax(x, axis=-1):
     ex = tf.exp(x)
     return ex / tf.reduce_sum(ex, axis=axis, keepdims=True)
 
+
+'''
+GELU (Gaussian Error Linear Unit) activation function
+'''
 def gelu(x):
     return 0.5*x*(1+tf.tanh(np.sqrt(2/np.pi)*(x+0.044715*tf.pow(x, 3))))
 
+
 def norm(x, scope, *, axis=-1, epsilon=1e-5):
     """Normalize to mean = 0, std = 1, then do a diagonal affine transform."""
+    '''
+    g = weights, b = biases
+    '''
     with tf.variable_scope(scope):
         n_state = x.shape[-1].value
         g = tf.get_variable('g', [n_state], initializer=tf.constant_initializer(1))
         b = tf.get_variable('b', [n_state], initializer=tf.constant_initializer(0))
+        '''
+        function is called "reduce_mean", because by default it reduces the number of dimensions of the
+        input tensor to 1.
+        I.e.: you put in a tensor of n dimensions and get back the mean of all its values as a single number
+        u = the mean of the values in the tensor
+        s = variance (mean square deviation) of the values
+        '''
         u = tf.reduce_mean(x, axis=axis, keepdims=True)
         s = tf.reduce_mean(tf.square(x-u), axis=axis, keepdims=True)
+        '''
+        x - u = shift x so that the mean is 0
+        tf.rsqrt = reciprocal (inverse) square root = 1/sqrt()
+        the addition of epsilon helps ensure numerical stability with very small s, and guarantees that no
+        division by zero can occur
+        '''
         x = (x - u) * tf.rsqrt(s + epsilon)
         x = x*g + b
         return x
@@ -111,7 +132,12 @@ def attn(x, scope, n_state, *, past, hparams):
         a = conv1d(a, 'c_proj', n_state)
         return a, present
 
-
+'''
+This is the feed-forward-layer.
+x = past (token sequence up to now)
+n_state = dimensionality of the feed-forward layer = 4 * dimensionality of the embedding vectors
+nx = dimensionality of the embedding vectors
+'''
 def mlp(x, scope, n_state, *, hparams):
     with tf.variable_scope(scope):
         nx = x.shape[-1].value
@@ -149,6 +175,10 @@ def model(hparams, X, past=None, scope='model', reuse=False):
         results = {}
         batch, sequence = shape_list(X)
 
+        '''
+        wpe = position encodings
+        wte = token encodings
+        '''
         wpe = tf.get_variable('wpe', [hparams.n_ctx, hparams.n_embd],
                              initializer=tf.random_normal_initializer(stddev=0.01))
         wte = tf.get_variable('wte', [hparams.n_vocab, hparams.n_embd],
